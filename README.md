@@ -7,7 +7,7 @@ live URL, demo video, measured load-test numbers) lands at the end of the build.
 ## Status
 
 - [x] Day 1 — Bare gateway, one provider (Groq)
-- [ ] Day 2 — Second provider (OpenRouter) + fallback routing
+- [x] Day 2 — Second provider (OpenRouter) + fallback routing
 - [ ] Day 3 — Caching (exact-match, then semantic)
 - [ ] Day 4 — Per-key rate limiting + cost tracking
 - [ ] Day 5 — Local provider (llama.cpp) + streaming passthrough
