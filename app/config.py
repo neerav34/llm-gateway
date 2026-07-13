@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     # Seconds to wait for a provider before giving up (fallback trigger in Day 2)
     provider_timeout: float = 30.0
 
+    # Upstash Redis (REST API) — cache + rate limit store
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
+    cache_ttl_seconds: int = 3600
+    # Budget for a cache lookup; a dead Redis must not stall requests
+    cache_timeout: float = 2.0
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
