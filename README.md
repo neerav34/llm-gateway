@@ -4,7 +4,7 @@ A multi-provider LLM routing gateway: one OpenAI-compatible endpoint in front of
 multiple providers, with automatic fallback, response caching, per-key rate
 limiting, cost tracking, and SSE streaming passthrough.
 
-**Live:** https://llm-gateway-rb0k.onrender.com &nbsp;·&nbsp; **Demo video:** _coming soon_
+**Live:** https://llm-gateway-rb0k.onrender.com &nbsp;·&nbsp; **Demo video:** https://youtu.be/9BZbCSWbZqM
 
 > Free-tier hosting note: the instance sleeps after 15 min idle — the first
 > request after a quiet spell takes ~30–50 s to cold-start. Everything after
