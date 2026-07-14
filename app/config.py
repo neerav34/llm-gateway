@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # Budget for a cache lookup; a dead Redis must not stall requests
     cache_timeout: float = 2.0
 
+    # Per-API-key rate limit: max requests per sliding window
+    rate_limit_requests: int = 20
+    rate_limit_window_seconds: int = 60
+
+    # SQLite file for per-key token/cost tracking
+    usage_db_path: str = "usage.db"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -9,7 +9,7 @@ live URL, demo video, measured load-test numbers) lands at the end of the build.
 - [x] Day 1 — Bare gateway, one provider (Groq)
 - [x] Day 2 — Second provider (OpenRouter) + fallback routing
 - [x] Day 3 — Exact-match caching on Upstash Redis (semantic caching: stretch goal)
-- [ ] Day 4 — Per-key rate limiting + cost tracking
+- [x] Day 4 — Per-key rate limiting + cost tracking
 - [ ] Day 5 — Local provider (llama.cpp) + streaming passthrough
 - [ ] Day 6 — Deploy to Render
 - [ ] Day 7 — README, demo video, load test
