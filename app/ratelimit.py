@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import httpx
 
+from app import http
 from app.config import settings
 
 logger = logging.getLogger("gateway.ratelimit")
@@ -29,12 +30,12 @@ class SlidingWindowLimiter:
 
     async def _pipeline(self, commands: List[List[str]]) -> Optional[list]:
         try:
-            async with httpx.AsyncClient(timeout=settings.cache_timeout) as client:
-                response = await client.post(
-                    f"{settings.upstash_redis_rest_url}/pipeline",
-                    headers={"Authorization": f"Bearer {settings.upstash_redis_rest_token}"},
-                    json=commands,
-                )
+            response = await http.client().post(
+                f"{settings.upstash_redis_rest_url}/pipeline",
+                headers={"Authorization": f"Bearer {settings.upstash_redis_rest_token}"},
+                json=commands,
+                timeout=settings.cache_timeout,
+            )
         except httpx.HTTPError as exc:
             logger.warning("redis unavailable (%s): rate limit fails open", exc)
             return None

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from app import http
 from app.config import settings
 from app.models import ChatCompletionRequest
 
@@ -41,12 +42,12 @@ class RedisCache:
     async def _command(self, *args: str) -> Optional[Any]:
         """Run one Redis command via Upstash REST (body = JSON array)."""
         try:
-            async with httpx.AsyncClient(timeout=settings.cache_timeout) as client:
-                response = await client.post(
-                    settings.upstash_redis_rest_url,
-                    headers={"Authorization": f"Bearer {settings.upstash_redis_rest_token}"},
-                    json=list(args),
-                )
+            response = await http.client().post(
+                settings.upstash_redis_rest_url,
+                headers={"Authorization": f"Bearer {settings.upstash_redis_rest_token}"},
+                json=list(args),
+                timeout=settings.cache_timeout,
+            )
         except httpx.HTTPError as exc:
             logger.warning("redis unavailable (%s): failing open", exc)
             return None

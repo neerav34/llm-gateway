@@ -2,6 +2,7 @@ from typing import Any, AsyncIterator, Dict
 
 import httpx
 
+from app import http
 from app.config import settings
 from app.models import ChatCompletionRequest
 from app.providers.base import Provider, ProviderError
@@ -59,12 +60,12 @@ class OpenAICompatProvider(Provider):
     async def chat_completion(self, request: ChatCompletionRequest) -> Dict[str, Any]:
         self._require_key()
         try:
-            async with httpx.AsyncClient(timeout=settings.provider_timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._headers(),
-                    json=self._payload(request, stream=False),
-                )
+            response = await http.client().post(
+                f"{self.base_url}/chat/completions",
+                headers=self._headers(),
+                json=self._payload(request, stream=False),
+                timeout=settings.provider_timeout,
+            )
         except httpx.TimeoutException:
             raise ProviderError(self.name, "request timed out", status_code=504)
         except httpx.HTTPError as exc:
@@ -87,29 +88,25 @@ class OpenAICompatProvider(Provider):
         if the connection or status fails, so the router can still fall back.
         After the first byte is yielded we're committed to this provider."""
         self._require_key()
-        # No read timeout: tokens trickle in for as long as generation runs
-        timeout = httpx.Timeout(settings.provider_timeout, read=None)
-        client = httpx.AsyncClient(timeout=timeout)
         try:
-            try:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    headers=self._headers(),
-                    json=self._payload(request, stream=True),
-                ) as response:
-                    if response.status_code != 200:
-                        body = await response.aread()
-                        raise ProviderError(
-                            self.name,
-                            f"HTTP {response.status_code}: {body.decode(errors='replace')[:300]}",
-                            status_code=502,
-                        )
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
-            except httpx.TimeoutException:
-                raise ProviderError(self.name, "request timed out", status_code=504)
-            except httpx.HTTPError as exc:
-                raise ProviderError(self.name, f"network error: {exc}")
-        finally:
-            await client.aclose()
+            async with http.client().stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers=self._headers(),
+                json=self._payload(request, stream=True),
+                # No read timeout: tokens trickle in for as long as generation runs
+                timeout=httpx.Timeout(settings.provider_timeout, read=None),
+            ) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    raise ProviderError(
+                        self.name,
+                        f"HTTP {response.status_code}: {body.decode(errors='replace')[:300]}",
+                        status_code=502,
+                    )
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+        except httpx.TimeoutException:
+            raise ProviderError(self.name, "request timed out", status_code=504)
+        except httpx.HTTPError as exc:
+            raise ProviderError(self.name, f"network error: {exc}")

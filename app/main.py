@@ -1,12 +1,14 @@
 import json
 import logging
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app import http
 from app.cache import RedisCache, cache_key
 from app.config import settings
 from app.models import ChatCompletionRequest
@@ -18,7 +20,14 @@ from app.usage import UsageTracker
 
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="LLM Gateway", version="0.4.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await http.startup()
+    yield
+    await http.shutdown()
+
+
+app = FastAPI(title="LLM Gateway", version="0.5.0", lifespan=lifespan)
 
 # Priority order: Groq first (fastest), OpenRouter as fallback.
 # llama.cpp joins as provider 3 in Day 5.
