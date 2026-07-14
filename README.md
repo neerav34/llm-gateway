@@ -10,7 +10,7 @@ live URL, demo video, measured load-test numbers) lands at the end of the build.
 - [x] Day 2 — Second provider (OpenRouter) + fallback routing
 - [x] Day 3 — Exact-match caching on Upstash Redis (semantic caching: stretch goal)
 - [x] Day 4 — Per-key rate limiting + cost tracking
-- [ ] Day 5 — Local provider (llama.cpp) + streaming passthrough
+- [x] Day 5 — SSE streaming passthrough (llama.cpp local provider: deferred, pluggable via the provider interface)
 - [ ] Day 6 — Deploy to Render
 - [ ] Day 7 — README, demo video, load test
 

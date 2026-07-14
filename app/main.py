@@ -1,10 +1,11 @@
+import json
 import logging
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.cache import RedisCache, cache_key
 from app.config import settings
@@ -75,8 +76,10 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
             headers={"Retry-After": str(settings.rate_limit_window_seconds)},
         )
 
-    # Streamed responses aren't cacheable (Day 5)
-    use_cache = cache.enabled and not request.stream
+    if request.stream:
+        return await _stream_completion(request, api_key, started)
+
+    use_cache = cache.enabled
     key = cache_key(request) if use_cache else None
 
     if use_cache:
@@ -135,3 +138,58 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
     if failed:
         headers["X-Gateway-Fallback-From"] = ",".join(failed)
     return JSONResponse(content=result, headers=headers)
+
+
+async def _stream_completion(request: ChatCompletionRequest, api_key: str, started: float):
+    """SSE passthrough: provider chunks stream to the client verbatim.
+
+    Streams bypass the cache (a token stream isn't a cacheable JSON blob).
+    Usage is still tracked: providers append a final usage chunk
+    (stream_options.include_usage), which we sniff as it passes through.
+    """
+    try:
+        served_by, stream, failed = await router.chat_completion_stream(request)
+    except AllProvidersFailed as exc:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": {
+                    "message": "all providers failed",
+                    "details": [str(e) for e in exc.errors],
+                }
+            },
+        )
+
+    async def passthrough():
+        sniffed = {"model": None, "usage": None}
+        buffer = b""
+        async for chunk in stream:
+            yield chunk  # client latency first — sniffing happens after send
+            buffer += chunk
+            while b"\n" in buffer:
+                line, buffer = buffer.split(b"\n", 1)
+                if not line.startswith(b"data: ") or line == b"data: [DONE]":
+                    continue
+                try:
+                    obj = json.loads(line[6:])
+                except json.JSONDecodeError:
+                    continue
+                sniffed["model"] = obj.get("model") or sniffed["model"]
+                if obj.get("usage"):
+                    sniffed["usage"] = obj["usage"]
+        usage_tracker.log(
+            api_key=api_key,
+            provider=served_by,
+            model=sniffed["model"],
+            usage=sniffed["usage"] or {},
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            cache_hit=False,
+        )
+
+    headers = {
+        "X-Gateway-Cache": "BYPASS",
+        "X-Gateway-Provider": served_by,
+    }
+    if failed:
+        headers["X-Gateway-Fallback-From"] = ",".join(failed)
+    return StreamingResponse(passthrough(), media_type="text/event-stream", headers=headers)
