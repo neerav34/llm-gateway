@@ -41,6 +41,7 @@ Client ──► FastAPI gateway (Render)
               ├─ 1. auth: per-key identity (X-API-Key / Bearer)
               ├─ 2. rate limit: sliding window, sorted set in Redis ──► Upstash Redis
               ├─ 3. cache lookup: sha256(prompt+params) ────────────► Upstash Redis
+              │      └─ on miss: semantic lookup (cosine ≥ 0.85) ───► Upstash Vector
               ├─ 4. route: Groq ──(on failure)──► OpenRouter
               │           (streaming: SSE passthrough, no buffering)
               └─ 5. usage log: tokens + est. $ per key ─────────────► SQLite
@@ -89,12 +90,22 @@ returning the stream to the client, so connection/auth/status failures still
 fall back. After the first byte we're committed: sent bytes can't be unsent,
 and splicing a second model's output mid-stream is worse than an honest error.
 
-**Cache strategy.** Exact-match: key = sha256 of canonical JSON
-(model, messages, temperature, max_tokens) — any change to prompt or params is
-a different key. Invalidation is TTL-based (1 h default). Streams bypass the
-cache. Semantic caching (embed + cosine similarity) is deliberately not
-implemented yet: returning a "similar enough" cached answer risks being
-confidently wrong; it's on the roadmap behind a per-key opt-in.
+**Cache strategy — two layers.** Layer 1 is exact-match: key = sha256 of
+canonical JSON (model, messages, temperature, max_tokens); any change is a
+different key. On exact miss, layer 2 is semantic: the prompt is embedded by
+Upstash Vector's hosted model and matched against previously cached prompts by
+cosine similarity — a paraphrase ("when did humans first land on the Moon?" vs
+"what year did people first set foot on the Moon?") serves the cached answer
+as `SEMANTIC-HIT`, with the similarity score exposed in a response header.
+
+Vectors store only a pointer to the Redis entry, so the response body has one
+home and one TTL (1 h default); a semantic match whose Redis entry expired
+deletes its stale vector and counts as a miss. The 0.85 threshold was
+calibrated by measurement, not guessed: real paraphrases scored ~0.89–0.92,
+unrelated prompts ~0.56 — the risk with semantic caching is returning a
+"similar enough" answer that's actually wrong, so the threshold sits far above
+the unrelated zone and is tunable per deployment (`SEMANTIC_CACHE_THRESHOLD`).
+Streams bypass both layers.
 
 **What if Redis dies?** The gateway fails open, verified by test: with Redis
 unreachable, requests still serve (uncached, unlimited) rather than erroring.
@@ -143,12 +154,12 @@ by design). Deploys to Render via [render.yaml](render.yaml) blueprint.
 | `GET /health` | Liveness |
 
 Response headers on every completion: `X-Gateway-Provider`,
-`X-Gateway-Cache` (HIT/MISS/BYPASS), `X-Gateway-Latency-Ms`, and
-`X-Gateway-Fallback-From` when a fallback occurred.
+`X-Gateway-Cache` (HIT/SEMANTIC-HIT/MISS/BYPASS), `X-Gateway-Latency-Ms`,
+`X-Gateway-Cache-Similarity` on semantic hits, and `X-Gateway-Fallback-From`
+when a fallback occurred.
 
 ## Roadmap
 
-- Semantic caching (embeddings + similarity threshold, per-key opt-in)
 - Local llama.cpp provider (config-only subclass; local dev-mode path)
 - Merge rate-limit + cache reads into one Redis pipeline call
 - Observability endpoint: per-provider request counts, cache hit rate, latency percentiles

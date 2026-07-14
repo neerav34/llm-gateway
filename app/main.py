@@ -16,6 +16,7 @@ from app.providers.groq import GroqProvider
 from app.providers.openrouter import OpenRouterProvider
 from app.ratelimit import SlidingWindowLimiter
 from app.router import AllProvidersFailed, Router
+from app.semantic_cache import SemanticCache
 from app.usage import UsageTracker
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,7 @@ app = FastAPI(title="LLM Gateway", version="0.5.0", lifespan=lifespan)
 # llama.cpp joins as provider 3 in Day 5.
 router = Router([GroqProvider(), OpenRouterProvider()])
 cache = RedisCache()
+semantic_cache = SemanticCache()
 limiter = SlidingWindowLimiter()
 usage_tracker = UsageTracker()
 
@@ -92,7 +94,24 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
     key = cache_key(request) if use_cache else None
 
     if use_cache:
+        # Layer 1: exact match
         cached = await cache.get(key)
+        cache_label = "HIT"
+        extra_headers = {}
+
+        # Layer 2: paraphrase-tolerant semantic match
+        if cached is None and semantic_cache.enabled:
+            sem = await semantic_cache.lookup(request)
+            if sem is not None:
+                sem_key, score = sem
+                cached = await cache.get(sem_key)
+                if cached is None:
+                    # Response expired from Redis; drop the stale vector
+                    await semantic_cache.evict(sem_key)
+                else:
+                    cache_label = "SEMANTIC-HIT"
+                    extra_headers["X-Gateway-Cache-Similarity"] = f"{score:.4f}"
+
         if cached is not None:
             elapsed_ms = round((time.perf_counter() - started) * 1000)
             response = cached["response"]
@@ -107,9 +126,10 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
             return JSONResponse(
                 content=response,
                 headers={
-                    "X-Gateway-Cache": "HIT",
+                    "X-Gateway-Cache": cache_label,
                     "X-Gateway-Provider": cached.get("provider", "unknown"),
                     "X-Gateway-Latency-Ms": str(elapsed_ms),
+                    **extra_headers,
                 },
             )
 
@@ -128,6 +148,8 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
 
     if use_cache:
         await cache.set(key, {"provider": served_by, "response": result})
+        if semantic_cache.enabled:
+            await semantic_cache.store(request, key)
 
     elapsed_ms = round((time.perf_counter() - started) * 1000)
     usage_tracker.log(

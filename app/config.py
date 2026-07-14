@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     # Budget for a cache lookup; a dead Redis must not stall requests
     cache_timeout: float = 2.0
 
+    # Upstash Vector (REST) — semantic cache. Unset = exact-match caching only.
+    upstash_vector_rest_url: str = ""
+    upstash_vector_rest_token: str = ""
+    # Min cosine similarity to serve a semantically-cached response.
+    # Calibrated against the index's embedding model: true paraphrases
+    # score ~0.89+, unrelated prompts ~0.56 — 0.85 sits far above the
+    # false-positive zone while catching real rewordings.
+    semantic_cache_threshold: float = 0.85
+
     # Per-API-key rate limit: max requests per sliding window
     rate_limit_requests: int = 20
     rate_limit_window_seconds: int = 60
