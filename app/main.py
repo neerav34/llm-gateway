@@ -5,8 +5,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app import http
 from app.cache import RedisCache, cache_key
@@ -58,6 +60,19 @@ def month_start_ts() -> float:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# Password-gated internal doc. The file is AES-GCM encrypted client-side
+# (see scripts/internal_doc/), so serving it here is safe even though the
+# route itself isn't secret — a wrong passphrase just fails to decrypt.
+INTERNAL_DOC_PATH = Path(__file__).resolve().parent.parent / "public" / "internal.html"
+
+
+@app.get("/internal.html", include_in_schema=False)
+async def internal_doc():
+    if not INTERNAL_DOC_PATH.exists():
+        return JSONResponse(status_code=404, content={"error": "not built yet"})
+    return FileResponse(INTERNAL_DOC_PATH, media_type="text/html")
 
 
 @app.get("/v1/usage")

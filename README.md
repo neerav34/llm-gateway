@@ -163,3 +163,18 @@ when a fallback occurred.
 - Local llama.cpp provider (config-only subclass; local dev-mode path)
 - Merge rate-limit + cache reads into one Redis pipeline call
 - Observability endpoint: per-provider request counts, cache hit rate, latency percentiles
+
+## INTERNAL
+
+Full internal documentation — every mechanism, the reasoning behind each choice,
+the codebase map, and the performance-bug story in full:
+**[LLM Gateway Field Manual](https://llm-gateway-rb0k.onrender.com/internal.html)**
+
+Passphrase required. Hint: *Landline*.
+
+The page is served from this project's own domain and depends on nothing else. Its
+body is AES-GCM encrypted under a key derived from the passphrase, so the text is
+genuinely not present in the file — a wrong passphrase fails to decrypt rather
+than being waved through. The plaintext source and the builder live outside the
+repository (`scripts/internal_doc/` is gitignored); committing them would make the
+passphrase decorative.

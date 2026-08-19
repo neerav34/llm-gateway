@@ -12,3 +12,8 @@ venv/
 
 # Local data (cost tracking DB comes in Day 4)
 *.db
+
+# Internal-doc plaintext source + builder — never commit these.
+# Only the encrypted output (public/internal.html) is meant to be public;
+# committing the plaintext would make the passphrase decorative.
+scripts/internal_doc/
